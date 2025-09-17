@@ -53,8 +53,12 @@ class DetectRequest(BaseModel):
     run_id: str = Field(..., min_length=8)
 
 
+class DetectRawRequest(BaseModel):
+    latex: str = Field(..., min_length=50, description="Raw LaTeX content")
+
+
 class DetectResponse(BaseModel):
-    run_id: str
+    run_id: Optional[str] = None
     score: int
     reasoning: str
 
@@ -254,15 +258,70 @@ async def download_pdf(run_id: str):
     return FileResponse(path=meta["pdf"], media_type="application/pdf", filename=os.path.basename(meta["pdf"]))
 
 
-@app.post("/detect", response_model=DetectResponse)
-async def detect(req: DetectRequest):
+def _detect_from_latex(tex_content: str) -> DetectResponse:
     if groq_generator is None:
         raise HTTPException(status_code=500, detail="Groq logic unavailable for detection")
     if not os.getenv("GROQ_API_KEY"):
         raise HTTPException(status_code=500, detail="GROQ_API_KEY not set")
 
+    # Reduce payload size to avoid token limits
+    max_chars = 20000
+    if len(tex_content) > max_chars:
+        tex_content = tex_content[:max_chars]
+
+    system_msg = (
+        "You are an AI-writing detector. Given LaTeX source of a research paper, "
+        "estimate how likely the document was AI-generated. First, think privately if needed. "
+        "Then OUTPUT ONLY ONE LINE in the exact format: SCORE:<0-100>; REASON:<brief reason>. "
+        "Do NOT add extra text, markdown, or XML tags. Be Extra Strict and assume the document was AI-generated if there is any evidence of AI-generated content."
+    )
+    user_msg = "LaTeX (UTF-8):\n" + tex_content
+
+    chat = groq_generator.client.chat.completions.create(
+        messages=[
+            {"role": "system", "content": system_msg},
+            {"role": "user", "content": user_msg},
+        ],
+        model="meta-llama/llama-4-maverick-17b-128e-instruct",
+        temperature=0.0,
+        max_tokens=256,
+    )
+    raw = (chat.choices[0].message.content or "").strip()
+
+    import re as _re
+    cleaned = _re.sub(r"<think>[\s\S]*?(</think>|$)", "", raw).strip()
+
+    import json as _json
+    mjson = _re.search(r"\{[\s\S]*\}", cleaned)
+    if mjson:
+        try:
+            obj = _json.loads(mjson.group(0))
+            score = int(obj.get("score"))
+            reasoning = str(obj.get("reasoning", "")).strip()
+            score = max(0, min(100, score))
+            return DetectResponse(score=score, reasoning=reasoning)
+        except Exception:
+            pass
+
+    m = _re.search(r"SCORE:\s*(100|[0-9]{1,2})\s*;\s*REASON:\s*(.*)", cleaned, flags=_re.IGNORECASE | _re.DOTALL)
+    if m:
+        score = int(m.group(1))
+        reasoning = m.group(2).strip()
+        score = max(0, min(100, score))
+        return DetectResponse(score=score, reasoning=reasoning)
+
+    mnum = _re.search(r"\b(100|[0-9]{1,2})\b", cleaned)
+    if not mnum:
+        raise ValueError(f"Unexpected detector output: {raw}")
+    score = int(mnum.group(1))
+    reasoning = cleaned
+    score = max(0, min(100, score))
+    return DetectResponse(score=score, reasoning=reasoning)
+
+
+@app.post("/detect", response_model=DetectResponse)
+async def detect(req: DetectRequest):
     meta = RUNS_INDEX.get(req.run_id)
-    # Discover tex path only (no PDF)
     tex_path: Optional[str] = None
     if meta and meta.get("tex") and os.path.exists(meta["tex"]):
         tex_path = meta["tex"]
@@ -279,65 +338,19 @@ async def detect(req: DetectRequest):
     try:
         with open(tex_path, "r", encoding="utf-8") as f:
             tex_content = f.read()
-        # Reduce payload size to avoid token limits
-        max_chars = 20000
-        if len(tex_content) > max_chars:
-            tex_content = tex_content[:max_chars]
+        result = _detect_from_latex(tex_content)
+        result.run_id = req.run_id
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Detection failed: {e}")
 
-        system_msg = (
-            "You are an AI-writing detector. Given LaTeX source of a research paper, "
-            "estimate how likely the document was AI-generated. First, think privately if needed. "
-            "Then OUTPUT ONLY ONE LINE in the exact format: SCORE:<0-100>; REASON:<brief reason>. "
-            "Do NOT add extra text, markdown, or XML tags."
-        )
-        user_msg = "LaTeX (UTF-8):\n" + tex_content
 
-        chat = groq_generator.client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_msg},
-                {"role": "user", "content": user_msg},
-            ],
-            model="meta-llama/llama-4-maverick-17b-128e-instruct",
-            temperature=0.0,
-            max_tokens=256,
-        )
-        raw = (chat.choices[0].message.content or "").strip()
-
-        # Strip any <think> blocks (even if unclosed) and whitespace
-        import re as _re
-        cleaned = _re.sub(r"<think>[\s\S]*?(</think>|$)", "", raw).strip()
-
-        # Try JSON first (in case model ignored instruction)
-        import json as _json
-        json_candidate = None
-        mjson = _re.search(r"\{[\s\S]*\}", cleaned)
-        if mjson:
-            json_candidate = mjson.group(0)
-            try:
-                obj = _json.loads(json_candidate)
-                score = int(obj.get("score"))
-                reasoning = str(obj.get("reasoning", "")).strip()
-                score = max(0, min(100, score))
-                return DetectResponse(run_id=req.run_id, score=score, reasoning=reasoning)
-            except Exception:
-                pass
-
-        # Parse SCORE/REASON format
-        m = _re.search(r"SCORE:\s*(100|[0-9]{1,2})\s*;\s*REASON:\s*(.*)", cleaned, flags=_re.IGNORECASE | _re.DOTALL)
-        if m:
-            score = int(m.group(1))
-            reasoning = m.group(2).strip()
-            score = max(0, min(100, score))
-            return DetectResponse(run_id=req.run_id, score=score, reasoning=reasoning)
-
-        # Fallback: extract integer and use remainder as reasoning
-        mnum = _re.search(r"\b(100|[0-9]{1,2})\b", cleaned)
-        if not mnum:
-            raise ValueError(f"Unexpected detector output: {raw}")
-        score = int(mnum.group(1))
-        reasoning = cleaned
-        score = max(0, min(100, score))
-        return DetectResponse(run_id=req.run_id, score=score, reasoning=reasoning)
+@app.post("/detect_raw", response_model=DetectResponse)
+async def detect_raw(req: DetectRawRequest):
+    try:
+        return _detect_from_latex(req.latex)
     except HTTPException:
         raise
     except Exception as e:

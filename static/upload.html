@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Detection for LaTeX</title>
+  <style>
+    :root { --bg:#f4f4f4; --fg:#111; --accent:#ff4d4f; --muted:#777; --surface:#fff; }
+    *{box-sizing:border-box}
+    body{margin:0;padding:24px;background:var(--bg);color:var(--fg);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Arial}
+    .container{max-width:920px;margin:0 auto}
+    .card{background:var(--surface);border:3px solid var(--fg);box-shadow:6px 6px 0 var(--fg);padding:24px;margin-bottom:24px}
+    .title{font-size:26px;font-weight:800;margin:0 0 8px 0}
+    .subtitle{color:var(--muted);margin:0 0 16px 0}
+    label{font-weight:700;display:block;margin:12px 0 8px}
+    textarea{width:100%;min-height:260px;padding:14px 16px;border:3px solid var(--fg);box-shadow:4px 4px 0 var(--fg)}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 16px;border:3px solid var(--fg);background:var(--accent);color:#fff;font-weight:800;cursor:pointer;box-shadow:4px 4px 0 var(--fg)}
+    .btn-secondary{background:var(--surface);color:var(--fg)}
+    .status{padding:12px 14px;border:3px solid var(--fg);background:#fffdf0;box-shadow:4px 4px 0 var(--fg);font-weight:700;margin-top:12px;white-space:pre-wrap}
+    .status.ok{background:#f0fff4;color:#0a7a33}
+    .status.error{background:#fff0f0;color:#a40000}
+    a.link{color:var(--fg);text-decoration:underline;font-weight:700}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="card">
+      <div class="title">🕵️ AI Detection for LaTeX</div>
+      <div class="subtitle">Upload or paste a .tex file to check AI-likeness.</div>
+
+      <label>Paste LaTeX</label>
+      <textarea id="latex" placeholder="Paste LaTeX content here..."></textarea>
+
+      <div class="row">
+        <input id="file" type="file" accept=".tex" />
+        <button class="btn" onclick="detect()">Detect AI (score)</button>
+        <a class="btn btn-secondary" href="/" style="text-decoration:none;">← Back</a>
+      </div>
+
+      <div id="status" class="status" style="display:none;"></div>
+    </div>
+  </div>
+
+  <script>
+    const $ = (s)=>document.querySelector(s);
+    const statusBox = $('#status');
+    const fileInput = $('#file');
+    const latexArea = $('#latex');
+
+    fileInput.addEventListener('change', async (e)=>{
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+      const text = await f.text();
+      latexArea.value = text;
+    });
+
+    function setStatus(msg, type=''){ statusBox.textContent = msg; statusBox.className = `status ${type}`.trim(); statusBox.style.display='block'; }
+
+    async function detect(){
+      const latex = latexArea.value.trim();
+      if (latex.length < 50){ setStatus('Please paste at least 50 characters of LaTeX.', 'error'); return; }
+      setStatus('Detecting AI-likeness…');
+      try{
+        const res = await fetch('/detect_raw', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ latex }) });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.detail || 'Detection failed');
+        setStatus(`🧠 Estimated AI score: ${data.score}%\nReason: ${data.reasoning}`, 'ok');
+      }catch(err){ setStatus(`❌ ${err.message}`, 'error'); }
+    }
+  </script>
+</body>
+</html> 
