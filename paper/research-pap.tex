@@ -1,0 +1,103 @@
+\documentclass[12pt,a4paper]{article}
+
+% Required packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{graphicx}
+\usepackage{cite}
+\usepackage{url}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{setspace}
+\usepackage{natbib}
+\usepackage{hyperref}
+
+% Page setup
+\geometry{margin=1in}
+\setlength{\columnsep}{0.28in}
+\doublespacing
+\setlength{\parindent}{0.5in}
+
+% Header and footer
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\thepage}
+\lhead{[Author Last Name] et al.}
+
+% Title page information
+\title{[Your Paper Title]}
+\author{[Author Name] \and [Second Author] \and [Third Author]}
+\date{\today}
+
+\begin{document}
+
+% Title page
+\maketitle
+\thispagestyle{empty}
+
+\begin{abstract}
+[Write your abstract here - typically 150-300 words summarizing your research objective, methodology, key findings, and conclusions.]
+
+\textbf{Keywords:} [keyword1], [keyword2], [keyword3], [keyword4], [keyword5]
+\end{abstract}
+
+\newpage
+\tableofcontents
+\newpage
+
+\twocolumn
+\section{Introduction}
+[Introduction content - present the problem, background, research questions, and paper structure]
+
+\subsection{[Subsection Title]}
+[Subsection content]
+
+\section{Literature Review}
+[Review of related work and existing research]
+
+\subsection{[Literature Subsection]}
+[Literature subsection content]
+
+\section{Methodology}
+[Description of your research methods, data collection, experimental setup]
+
+\subsection{[Method Subsection]}
+[Method details]
+
+\section{Results}
+[Presentation of your findings]
+
+\subsection{[Results Subsection]}
+[Results details]
+
+[Your results content here]
+
+\section{Discussion}
+[Analysis and interpretation of results]
+
+\subsection{[Discussion Subsection]}
+[Discussion details]
+
+\section{Conclusion}
+[Summary of findings, contributions, and future work]
+
+\section*{Acknowledgments}
+[Optional - thank funding sources, collaborators, etc.]
+
+% Bibliography
+\bibliographystyle{unsrtnat}
+\begin{thebibliography}{99}
+
+\bibitem{[citation_key1]}
+[Author Last], [First Initial]. ([Year]). [Title]. \emph{[Journal Name]}, [Volume]([Issue]), [Pages].
+
+\bibitem{[citation_key2]}
+[Author Last], [First Initial], \& [Author Last], [First Initial]. ([Year]). \emph{[Book Title]}. [Publisher].
+
+\bibitem{[citation_key3]}
+[Author Last], [First Initial]. ([Year]). [Title]. In \emph{[Conference Proceedings]} (pp. [Pages]). [Publisher].
+
+\end{thebibliography}
+
+\end{document}

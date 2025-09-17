@@ -1,0 +1,249 @@
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel, Field
+from typing import Optional, Dict
+import os
+import shutil
+import tempfile
+from pathlib import Path
+from datetime import datetime
+import uuid
+
+# Reuse existing logic
+try:
+    import main as gemini_generator
+except Exception:
+    gemini_generator = None
+
+try:
+    import groq_chat as groq_generator
+except Exception:
+    groq_generator = None
+
+app = FastAPI(title="Research Paper Generator API")
+
+# Persistent storage for generated runs (in-memory index)
+RUNS_INDEX: Dict[str, Dict[str, Optional[str]]] = {}
+
+# Directories
+PROJECT_ROOT = Path(__file__).resolve().parent
+STATIC_DIR = PROJECT_ROOT / "static"
+RUNS_DIR = PROJECT_ROOT / "runs"
+RUNS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Serve static files
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+
+
+class GenerateRequest(BaseModel):
+    topic: str = Field(..., min_length=3, description="Research topic")
+    provider: str = Field(..., pattern="^(Gemini|Groq)$", description="AI provider: Gemini or Groq")
+
+
+class GenerateResponse(BaseModel):
+    run_id: str
+    provider: str
+    tex_filename: Optional[str]
+    pdf_filename: Optional[str]
+
+
+@app.get("/", response_class=HTMLResponse)
+async def index() -> HTMLResponse:
+    index_path = STATIC_DIR / "index.html"
+    if not index_path.exists():
+        raise HTTPException(status_code=404, detail="UI not found")
+    with open(index_path, "r", encoding="utf-8") as f:
+        return HTMLResponse(f.read())
+
+
+def _ensure_template_path() -> str:
+    template_path = PROJECT_ROOT / "paper" / "research-pap.tex"
+    if not template_path.exists():
+        raise HTTPException(status_code=500, detail="Template not found at paper/research-pap.tex")
+    return str(template_path)
+
+
+def _generate_with_gemini(topic: str, workdir: Path) -> (Optional[str], Optional[str]):
+    if not gemini_generator:
+        raise HTTPException(status_code=500, detail="Gemini module not available")
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(str(workdir))
+        os.makedirs("output", exist_ok=True)
+        os.makedirs("export", exist_ok=True)
+
+        template_path = _ensure_template_path()
+        template_tex = gemini_generator.read_template(template_path)
+        system_instruction = gemini_generator.build_system_instruction(template_tex)
+
+        user_prompt = (
+            "Generate a complete research paper in LaTeX strictly following the template. "
+            f"Topic: {topic}. "
+            "Ensure all placeholders are replaced with detailed, coherent content relevant to this topic. "
+            "Do NOT include any figures, images, or \\includegraphics commands. "
+            "Focus on comprehensive text content, tables, and mathematical equations only."
+        )
+
+        response = gemini_generator.client.models.generate_content(
+            model="gemini-2.0-flash-exp",
+            config=gemini_generator.types.GenerateContentConfig(system_instruction=system_instruction),
+            contents=user_prompt,
+        )
+        tex = gemini_generator.sanitize_latex_output(response.text or "")
+
+        if not tex.startswith("\\documentclass") or not tex.strip().endswith("\\end{document}"):
+            raise HTTPException(status_code=500, detail="Model output is not a complete LaTeX document.")
+
+        tex_path = gemini_generator.write_output(tex)
+
+        try:
+            if shutil.which("pdflatex"):
+                pdf_path = gemini_generator.compile_latex_with_system(tex_path, export_dir="export")
+            else:
+                pdf_path = gemini_generator.compile_latex_with_docker(tex_path, export_dir="export")
+        except Exception:
+            pdf_path = None
+
+        return tex_path, pdf_path
+    finally:
+        os.chdir(original_cwd)
+
+
+def _generate_with_groq(topic: str, workdir: Path) -> (Optional[str], Optional[str]):
+    if not groq_generator:
+        raise HTTPException(status_code=500, detail="Groq module not available")
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(str(workdir))
+        os.makedirs("output", exist_ok=True)
+        os.makedirs("export", exist_ok=True)
+
+        template_path = _ensure_template_path()
+        template_tex = groq_generator.read_template(template_path)
+        system_instruction = groq_generator.build_system_instruction(template_tex)
+
+        user_prompt = (
+            "Generate a complete research paper in LaTeX strictly following the template. "
+            f"Topic: {topic}. "
+            "Ensure all placeholders are replaced with detailed, coherent content relevant to this topic. "
+            "Do NOT include any figures, images, or \\includegraphics commands. "
+            "Focus on comprehensive text content, tables, and mathematical equations only."
+        )
+
+        chat_completion = groq_generator.client.chat.completions.create(
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_prompt},
+            ],
+            model="llama-3.3-70b-versatile",
+            temperature=0.7,
+            max_tokens=8000,
+        )
+
+        tex = groq_generator.sanitize_latex_output(chat_completion.choices[0].message.content or "")
+
+        if not tex.startswith("\\documentclass") or not tex.strip().endswith("\\end{document}"):
+            raise HTTPException(status_code=500, detail="Model output is not a complete LaTeX document.")
+
+        tex_path = groq_generator.write_output(tex)
+
+        try:
+            if shutil.which("pdflatex"):
+                pdf_path = groq_generator.compile_latex_with_system(tex_path, export_dir="export")
+            else:
+                pdf_path = groq_generator.compile_latex_with_docker(tex_path, export_dir="export")
+        except Exception:
+            pdf_path = None
+
+        return tex_path, pdf_path
+    finally:
+        os.chdir(original_cwd)
+
+
+@app.post("/generate", response_model=GenerateResponse)
+async def generate(req: GenerateRequest):
+    topic = req.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=400, detail="Topic cannot be empty")
+
+    # Environment key checks
+    if req.provider == "Gemini":
+        if gemini_generator is None:
+            raise HTTPException(status_code=500, detail="Gemini logic unavailable")
+        if not os.getenv("GOOGLE_API_KEY"):
+            raise HTTPException(status_code=500, detail="GOOGLE_API_KEY not set")
+    else:
+        if groq_generator is None:
+            raise HTTPException(status_code=500, detail="Groq logic unavailable")
+        if not os.getenv("GROQ_API_KEY"):
+            raise HTTPException(status_code=500, detail="GROQ_API_KEY not set")
+
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:8]
+    run_dir = RUNS_DIR / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        if req.provider == "Gemini":
+            tex_path, pdf_path = _generate_with_gemini(topic, run_dir)
+        else:
+            tex_path, pdf_path = _generate_with_groq(topic, run_dir)
+
+        # Store absolute paths in index
+        abs_tex = str(Path(tex_path).resolve()) if tex_path else None
+        abs_pdf = str(Path(pdf_path).resolve()) if pdf_path else None
+        RUNS_INDEX[run_id] = {"tex": abs_tex, "pdf": abs_pdf}
+
+        tex_filename = os.path.basename(abs_tex) if abs_tex else None
+        pdf_filename = os.path.basename(abs_pdf) if abs_pdf else None
+
+        return GenerateResponse(
+            run_id=run_id,
+            provider=req.provider,
+            tex_filename=tex_filename,
+            pdf_filename=pdf_filename,
+        )
+    except HTTPException:
+        # Re-raise as is
+        raise
+    except Exception as e:
+        # Cleanup partial run directory on failure
+        try:
+            shutil.rmtree(run_dir, ignore_errors=True)
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"Generation failed: {e}")
+
+
+@app.get("/download/tex/{run_id}")
+async def download_tex(run_id: str):
+    meta = RUNS_INDEX.get(run_id)
+    tex_path: Optional[str] = None
+    if meta and meta.get("tex") and os.path.exists(meta["tex"]):
+        tex_path = meta["tex"]
+    else:
+        # Fallback: search in run directory for a .tex file
+        run_dir = RUNS_DIR / run_id / "output"
+        if run_dir.exists():
+            candidates = [p for p in run_dir.glob("*.tex")]
+            if candidates:
+                tex_path = str(candidates[0].resolve())
+    if not tex_path or not os.path.exists(tex_path):
+        raise HTTPException(status_code=404, detail="LaTeX file not found")
+    return FileResponse(path=tex_path, media_type="text/plain", filename=os.path.basename(tex_path))
+
+
+@app.get("/download/pdf/{run_id}")
+async def download_pdf(run_id: str):
+    meta = RUNS_INDEX.get(run_id)
+    if not meta or not meta.get("pdf") or not os.path.exists(meta["pdf"]):
+        raise HTTPException(status_code=404, detail="PDF not available")
+    return FileResponse(path=meta["pdf"], media_type="application/pdf", filename=os.path.basename(meta["pdf"]))
+
+
+# Health check
+@app.get("/health")
+async def health():
+    return JSONResponse({"status": "ok"}) 
