@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AI Detection for LaTeX</title>
+  <title>AI Detection for LaTeX/PDF</title>
   <style>
     :root { --bg:#f4f4f4; --fg:#111; --accent:#ff4d4f; --muted:#777; --surface:#fff; }
     *{box-sizing:border-box}
@@ -20,20 +20,19 @@
     .status{padding:12px 14px;border:3px solid var(--fg);background:#fffdf0;box-shadow:4px 4px 0 var(--fg);font-weight:700;margin-top:12px;white-space:pre-wrap}
     .status.ok{background:#f0fff4;color:#0a7a33}
     .status.error{background:#fff0f0;color:#a40000}
-    a.link{color:var(--fg);text-decoration:underline;font-weight:700}
   </style>
 </head>
 <body>
   <div class="container">
     <div class="card">
-      <div class="title">🕵️ AI Detection for LaTeX</div>
-      <div class="subtitle">Upload or paste a .tex file to check AI-likeness.</div>
+      <div class="title">🕵️ AI Detection for LaTeX / PDF</div>
+      <div class="subtitle">Upload a .tex or .pdf file, or paste LaTeX below.</div>
 
       <label>Paste LaTeX</label>
       <textarea id="latex" placeholder="Paste LaTeX content here..."></textarea>
 
       <div class="row">
-        <input id="file" type="file" accept=".tex" />
+        <input id="file" type="file" accept=".tex,.pdf" />
         <button class="btn" onclick="detect()">Detect AI (score)</button>
         <a class="btn btn-secondary" href="/" style="text-decoration:none;">← Back</a>
       </div>
@@ -48,20 +47,33 @@
     const fileInput = $('#file');
     const latexArea = $('#latex');
 
+    let selectedFile = null;
+
     fileInput.addEventListener('change', async (e)=>{
-      const f = e.target.files && e.target.files[0];
-      if (!f) return;
-      const text = await f.text();
-      latexArea.value = text;
+      selectedFile = e.target.files && e.target.files[0];
+      if (!selectedFile) return;
+      if (selectedFile.name.toLowerCase().endsWith('.tex')){
+        const text = await selectedFile.text();
+        latexArea.value = text;
+      }
     });
 
     function setStatus(msg, type=''){ statusBox.textContent = msg; statusBox.className = `status ${type}`.trim(); statusBox.style.display='block'; }
 
     async function detect(){
-      const latex = latexArea.value.trim();
-      if (latex.length < 50){ setStatus('Please paste at least 50 characters of LaTeX.', 'error'); return; }
-      setStatus('Detecting AI-likeness…');
       try{
+        setStatus('Detecting AI-likeness…');
+        if (selectedFile && selectedFile.name.toLowerCase().endsWith('.pdf')){
+          const form = new FormData();
+          form.append('file', selectedFile);
+          const r = await fetch('/detect_pdf', { method:'POST', body: form });
+          const data = await r.json();
+          if (!r.ok) throw new Error(data?.detail || 'PDF detection failed');
+          setStatus(`🧠 Estimated AI score: ${data.score}%\nReason: ${data.reasoning}`, 'ok');
+          return;
+        }
+        const latex = latexArea.value.trim();
+        if (latex.length < 50){ setStatus('Please paste at least 50 characters of LaTeX or upload a PDF.', 'error'); return; }
         const res = await fetch('/detect_raw', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ latex }) });
         const data = await res.json();
         if (!res.ok) throw new Error(data?.detail || 'Detection failed');

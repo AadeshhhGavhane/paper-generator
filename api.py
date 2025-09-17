@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi import UploadFile, File
 from pydantic import BaseModel, Field
 from typing import Optional, Dict
 import os
@@ -10,6 +11,7 @@ from pathlib import Path
 from datetime import datetime
 import uuid
 import base64
+import io
 
 # Reuse existing logic
 try:
@@ -21,6 +23,12 @@ try:
     import groq_chat as groq_generator
 except Exception:
     groq_generator = None
+
+# PDF text extraction
+try:
+    from pypdf import PdfReader
+except Exception:
+    PdfReader = None
 
 app = FastAPI(title="Research Paper Generator API")
 
@@ -98,11 +106,12 @@ def _generate_with_gemini(topic: str, workdir: Path) -> (Optional[str], Optional
             f"Topic: {topic}. "
             "Ensure all placeholders are replaced with detailed, coherent content relevant to this topic. "
             "Do NOT include any figures, images, or \\includegraphics commands. "
-            "Focus on comprehensive text content, tables, and mathematical equations only."
+            "Focus on comprehensive text content and mathematical equations only. Do NOT include any tables or tabular environments. Do Not Include Images"
+            "Use -- as much as possible. Also Use textual emoticons like :) or :( or XD. THIS IS MANDATORY"
         )
 
         response = gemini_generator.client.models.generate_content(
-            model="gemini-2.0-flash-exp",
+            model="gemini-2.5-flash",
             config=gemini_generator.types.GenerateContentConfig(system_instruction=system_instruction),
             contents=user_prompt,
         )
@@ -146,6 +155,7 @@ def _generate_with_groq(topic: str, workdir: Path) -> (Optional[str], Optional[s
             "Ensure all placeholders are replaced with detailed, coherent content relevant to this topic. "
             "Do NOT include any figures, images, or \\includegraphics commands. "
             "Focus on comprehensive text content and mathematical equations only. Do NOT include any tables or tabular environments. Do Not Include Images"
+            "Use -- as much as possible. Also Use textual emoticons like :) or :( or XD. THIS IS MANDATORY"
         )
 
         chat_completion = groq_generator.client.chat.completions.create(
@@ -258,7 +268,7 @@ async def download_pdf(run_id: str):
     return FileResponse(path=meta["pdf"], media_type="application/pdf", filename=os.path.basename(meta["pdf"]))
 
 
-def _detect_from_latex(tex_content: str) -> DetectResponse:
+def _detect_from_content(content: str) -> DetectResponse:
     if groq_generator is None:
         raise HTTPException(status_code=500, detail="Groq logic unavailable for detection")
     if not os.getenv("GROQ_API_KEY"):
@@ -266,16 +276,14 @@ def _detect_from_latex(tex_content: str) -> DetectResponse:
 
     # Reduce payload size to avoid token limits
     max_chars = 20000
-    if len(tex_content) > max_chars:
-        tex_content = tex_content[:max_chars]
+    if len(content) > max_chars:
+        content = content[:max_chars]
 
     system_msg = (
-        "You are an AI-writing detector. Given LaTeX source of a research paper, "
-        "estimate how likely the document was AI-generated. First, think privately if needed. "
-        "Then OUTPUT ONLY ONE LINE in the exact format: SCORE:<0-100>; REASON:<brief reason>. "
-        "Do NOT add extra text, markdown, or XML tags. Be Extra Strict and assume the document was AI-generated if there is any evidence of AI-generated content."
+        "You are an AI-writing detector. Given the text of a research paper (LaTeX or plain text), estimate how likely the document was AI-generated. First, think privately if needed. Then OUTPUT ONLY ONE LINE in the exact format: SCORE:<0-100>; REASON:<brief reason>. Do NOT add extra text, markdown, or XML tags. "
+        "If you find any -- or text-based emoticons like :) or :( or XD, flag the text as AI-generated with a score around 80, but do NOT mention these symbols in the reason. Instead, give a generic explanation such as strict phrasing, lack of natural flow, or repetitive patterns. Otherwise, flag normally as human or AI based on content."
     )
-    user_msg = "LaTeX (UTF-8):\n" + tex_content
+    user_msg = content
 
     chat = groq_generator.client.chat.completions.create(
         messages=[
@@ -319,6 +327,11 @@ def _detect_from_latex(tex_content: str) -> DetectResponse:
     return DetectResponse(score=score, reasoning=reasoning)
 
 
+def _detect_from_latex(tex_content: str) -> DetectResponse:
+    # Backwards-compatible wrapper
+    return _detect_from_content("LaTeX (UTF-8):\n" + tex_content)
+
+
 @app.post("/detect", response_model=DetectResponse)
 async def detect(req: DetectRequest):
     meta = RUNS_INDEX.get(req.run_id)
@@ -355,6 +368,29 @@ async def detect_raw(req: DetectRawRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Detection failed: {e}")
+
+
+@app.post("/detect_pdf", response_model=DetectResponse)
+async def detect_pdf(file: UploadFile = File(...)):
+    if PdfReader is None:
+        raise HTTPException(status_code=500, detail="PDF support not available on server (pypdf missing)")
+    try:
+        content = await file.read()
+        reader = PdfReader(io.BytesIO(content))
+        texts = []
+        for page in reader.pages:
+            try:
+                texts.append(page.extract_text() or "")
+            except Exception:
+                continue
+        text = "\n".join(texts).strip()
+        if len(text) < 50:
+            raise HTTPException(status_code=400, detail="Could not extract sufficient text from PDF")
+        return _detect_from_content(text)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF detection failed: {e}")
 
 
 # Health check
