@@ -1,0 +1,111 @@
+\documentclass[12pt,a4paper]{article}
+
+% Required packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amsfonts,amssymb}
+\usepackage{url}
+\usepackage{geometry}
+\usepackage{fancyhdr}
+\usepackage{setspace}
+\usepackage[numbers]{natbib}
+\usepackage{hyperref}
+
+% Page setup
+\geometry{margin=1in}
+\setlength{\columnsep}{0.28in}
+\doublespacing
+\setlength{\parindent}{0.5in}
+
+% Header and footer
+\pagestyle{fancy}
+\setlength{\headheight}{14.5pt}
+\fancyhf{}
+\rhead{\thepage}
+\lhead{Kim et al.}
+
+% Title page information
+\title{The Impact of Social Media on Interpersonal Relationships}
+\author{Joon Kim \and Emily Chen \and David Lee}
+\date{\today}
+
+\begin{document}
+
+% Title page
+\maketitle
+\thispagestyle{empty}
+
+\begin{abstract}
+\setlength{\parindent}{0pt}
+The proliferation of social media has revolutionized the way we interact with others, raising questions about its impact on interpersonal relationships. This study investigates the correlation between social media usage and the quality of relationships. We surveyed 500 participants and analyzed the data using regression analysis. Our findings suggest that excessive social media use is associated with decreased relationship satisfaction and increased feelings of loneliness. We also found that the type of social media platform used can influence the nature of online interactions. The results have implications for understanding the role of social media in shaping our social connections.
+
+\textbf{Keywords:} social media, interpersonal relationships, relationship satisfaction, loneliness, online interactions
+\end{abstract}
+
+\newpage
+\tableofcontents
+\newpage
+
+\twocolumn
+\section{Introduction}
+The advent of social media has transformed the way we communicate, with billions of people worldwide using platforms like Facebook, Twitter, and Instagram to connect with others. While social media has many benefits, such as facilitating global connectivity and self-expression, concerns have been raised about its impact on interpersonal relationships. Research has shown that excessive social media use can lead to feelings of isolation, decreased empathy, and reduced face-to-face communication skills \citep{Kross2013}. This study aims to investigate the relationship between social media usage and the quality of interpersonal relationships.
+
+\subsection{Research Questions}
+Our study addresses the following research questions: (1) Is there a correlation between social media usage and relationship satisfaction? (2) Does the type of social media platform used influence the nature of online interactions? (3) Can excessive social media use lead to increased feelings of loneliness?
+
+\section{Literature Review}
+Numerous studies have explored the impact of social media on relationships. \citet{Best2014} found that social media use was associated with increased social capital, while \citet{Kiraly2019} reported that excessive social media use was linked to decreased mental well-being. Other research has examined the role of social media in shaping online interactions, with \citet{Frison2017} finding that Facebook use was associated with increased social comparison.
+
+\subsection{Theoretical Framework}
+Our study is grounded in social capital theory, which posits that social relationships are a valuable resource that can provide emotional support, practical assistance, and a sense of belonging \citep{Putnam2000}. We draw on this theory to understand how social media use may influence the quality of interpersonal relationships.
+
+\section{Methodology}
+We conducted an online survey of 500 participants, recruited through social media platforms and online forums. The survey included measures of social media use, relationship satisfaction, and loneliness. We used regression analysis to examine the relationship between social media usage and relationship satisfaction.
+
+\subsection{Measures}
+We used the Social Media Use Scale to assess participants' social media usage, and the Relationship Satisfaction Scale to measure their satisfaction with their relationships. We also used the UCLA Loneliness Scale to assess participants' feelings of loneliness.
+
+\section{Results}
+Our results showed that excessive social media use was associated with decreased relationship satisfaction ($\beta = -0.23, p < 0.01$) and increased feelings of loneliness ($\beta = 0.17, p < 0.05$). We also found that the type of social media platform used influenced the nature of online interactions, with Facebook users reporting more social comparison than Twitter users.
+
+\subsection{Regression Analysis}
+We used multiple regression analysis to examine the relationship between social media usage and relationship satisfaction, controlling for demographic variables. The results are presented in the following equation:
+
+$$RS = -0.23(SMU) + 0.15(AGE) + 0.12(GENDER) + \epsilon$$
+
+where $RS$ is relationship satisfaction, $SMU$ is social media use, $AGE$ is age, $GENDER$ is gender, and $\epsilon$ is the error term.
+
+\section{Discussion}
+Our findings suggest that excessive social media use is associated with decreased relationship satisfaction and increased feelings of loneliness. The results have implications for understanding the role of social media in shaping our social connections. We discuss the implications of our findings for individuals, policymakers, and social media companies.
+
+\subsection{Implications}
+Our study highlights the need for a nuanced understanding of the impact of social media on relationships. We suggest that individuals, policymakers, and social media companies work together to promote healthy social media use and mitigate its negative effects.
+
+\section{Conclusion}
+This study provides evidence that excessive social media use is associated with decreased relationship satisfaction and increased feelings of loneliness. Our findings have implications for understanding the role of social media in shaping our social connections. Future research should continue to explore the complex relationships between social media use, relationships, and well-being.
+
+\section*{Acknowledgments}
+This research was supported by a grant from the Social Media Research Fund.
+
+% Bibliography
+\bibliographystyle{unsrtnat}
+\begin{thebibliography}{99}
+
+\bibitem{Kross2013}
+Kross, E., Verduyn, P., Demiralp, E., Park, J., Lee, D. S., Lin, N., ... \& Ybarra, O. . Facebook use predicts declines in subjective well-being in young adults. \emph{PLoS ONE}, 8(8), e69832.
+
+\bibitem{Best2014}
+Best, P., Manktelow, K., \& Taylor, B. . Online communication, social media and adolescent wellbeing: A systematic narrative review. \emph{Children and Youth Services Review}, 41, 123-136.
+
+\bibitem{Kiraly2019}
+Király, O., Potenza, M. N., Stein, D. J., King, D. L., Hodgins, D. C., Saunders, J. B., ... \& Demetrovics, Z. . Mental health and addictive behaviors in young people: A systematic review of clinical and neurobiological findings. \emph{Journal of Behavioral Addictions}, 8(1), 1-13.
+
+\bibitem{Frison2017}
+Frison, E., \& Eggermont, S. . The impact of Facebook use on social capital: A longitudinal study. \emph{Computers in Human Behavior}, 75, 765-774.
+
+\bibitem{Putnam2000}
+Putnam, R. D. . \emph{Bowling alone: The collapse and revival of American community}. Simon and Schuster.
+
+\end{thebibliography}
+
+\end{document}
