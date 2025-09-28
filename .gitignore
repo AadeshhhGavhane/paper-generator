@@ -1,18 +1,90 @@
-# Python-generated files
+############################################################
+# Project .gitignore (Research Paper Generator & Detector)  #
+# Keep this focused on actual artifacts produced by this    #
+# Python + LaTeX + FastAPI/Streamlit project.               #
+############################################################
+
+# ---- Python bytecode / cache ----
 __pycache__/
-*.py[oc]
-build/
-dist/
-wheels/
-*.egg-info
+*.py[cod]
+*$py.class
+*.so
+.cache/
 
-# Virtual environments
-.venv
+# ---- Packaging metadata (kept minimal) ----
+*.egg-info/
 
-# env
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+*.venv
+
+# ---- Environment / secrets ----
 .env
+.env.*
+*.env
 
-# docs
+# ---- Test & coverage artifacts ----
+.pytest_cache/
+htmlcov/
+.coverage*
+coverage.xml
+
+# ---- LaTeX build artifacts ----
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.idx
+*.ilg
+*.ind
+*.lof
+*.log
+*.lot
+*.out
+*.toc
+*.synctex.gz
+*.nav
+*.snm
+*.vrb
+
+# ---- Generated output directories (runtime) ----
 export/
 output/
 runs/
+
+# ---- Logs ----
+*.log
+logs/
+
+# ---- Streamlit ----
+.streamlit/
+
+# ---- OS / Editor noise ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ---- Jupyter (not currently used, but safe) ----
+.ipynb_checkpoints/
+
+# ---- Node (placeholder if frontend added later) ----
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ---- Uvicorn runtime pid ----
+.uvicorn.pid
+
+# Notes:
+# - Do NOT ignore Dockerfile or .dockerignore; include them when added.
+# - Keep uv.lock tracked for reproducible builds.
+# - Adjust patterns only if new build tooling is introduced.
