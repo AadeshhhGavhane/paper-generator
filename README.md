@@ -27,9 +27,15 @@ research-paper-generator-and-detector/
 │   ├── models/                # Pydantic models
 │   └── utils/
 │       └── latex_utils.py     # LaTeX processing utilities
-├── frontend/                   # Static Web Interface
-│   ├── index.html             # Main interface
-│   └── upload.html            # PDF upload interface
+├── frontend/                        # Web Interface
+│   ├── index.html                   # Main paper generation interface
+│   ├── upload.html                  # AI detection and file upload interface
+│   ├── css/                         # Stylesheets
+│   │   ├── styles.css               # Main page styling
+│   │   └── upload.css               # Upload page styling
+│   └── js/                          # JavaScript Logic
+│       ├── main.js                  # Paper generation and detection logic
+│       └── upload.js                # File upload and content detection logic
 ├── paper/
 │   └── research-pap.tex       # LaTeX template
 ├── runs/                      # Generated papers storage
