@@ -23,8 +23,7 @@ ENV/
 
 # ---- Environment / secrets ----
 .env
-.env.*
-*.env
+
 
 # ---- Test & coverage artifacts ----
 .pytest_cache/
@@ -56,13 +55,6 @@ export/
 output/
 runs/
 
-# ---- Logs ----
-*.log
-logs/
-
-# ---- Streamlit ----
-.streamlit/
-
 # ---- OS / Editor noise ----
 .DS_Store
 Thumbs.db
@@ -72,14 +64,6 @@ Thumbs.db
 *.swo
 *~
 
-# ---- Jupyter (not currently used, but safe) ----
-.ipynb_checkpoints/
-
-# ---- Node (placeholder if frontend added later) ----
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
 
 # ---- Uvicorn runtime pid ----
 .uvicorn.pid

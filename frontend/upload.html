@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI Detection Upload - Research Paper Tool</title>
+  <link rel="stylesheet" href="css/upload.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🕵️ AI Detection Tool</h1>
+      <p>Analyze LaTeX or PDF files for AI-generated content</p>
+    </div>
+
+    <div class="main-card">
+      <div class="form-section">
+        <label>Paste LaTeX Content</label>
+        <textarea id="latex" placeholder="Paste your LaTeX content here for analysis..."></textarea>
+      </div>
+
+      <div class="file-input-wrapper">
+        <input id="file" type="file" accept=".tex,.pdf" />
+      </div>
+
+      <div class="button-row">
+        <button class="btn btn-primary" onclick="detect()">
+          🔍 Detect AI Content
+        </button>
+        <a class="btn btn-secondary" href="/" style="text-decoration:none;">
+          ← Back to Generator
+        </a>
+      </div>
+
+      <div id="status" class="status-box" style="display:none;"></div>
+    </div>
+  </div>
+
+  <script src="js/upload.js"></script>
+</body>
+</html>

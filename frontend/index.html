@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Research Paper Generator</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <h1>🎓 Research Paper Generator</h1>
+      <p>Create professional research papers with AI assistance</p>
+    </div>
+
+    <div class="main-card">
+      <div class="form-group">
+        <label for="topic">Research Topic</label>
+        <textarea id="topic" placeholder="Enter your research topic, e.g., Generative AI for Climate Modeling"></textarea>
+      </div>
+
+      <div class="action-row">
+        <div class="form-group" style="margin-bottom: 0;">
+          <label for="provider">AI Provider</label>
+          <select id="provider">
+            <option value="Gemini">Gemini (Google)</option>
+            <option value="Groq">Groq (Llama)</option>
+          </select>
+        </div>
+        <button id="generateBtn" class="btn btn-primary" onclick="generatePaper()">
+          🎯 Generate Paper
+        </button>
+      </div>
+
+      <div id="status" class="status-box" style="display:none;"></div>
+
+      <div id="downloads" class="downloads-grid" style="display:none;">
+        <a id="dlTex" class="btn btn-secondary" href="#" download>
+          📄 Download LaTeX
+        </a>
+        <a id="dlPdf" class="btn btn-secondary" href="#" download>
+          📕 Download PDF
+        </a>
+      </div>
+
+      <div id="detectRow" class="detect-section" style="display:none;">
+        <button id="detectBtn" class="btn btn-secondary" onclick="detectAI()">
+          🕵️ Detect AI Content
+        </button>
+        <div id="detectStatus" class="status-box" style="display:none;"></div>
+      </div>
+
+      <div class="link-section">
+        <a href="/static/upload.html">Upload a LaTeX file for detection →</a>
+      </div>
+    </div>
+
+    <div class="footer-card">
+      Ensure environment keys are set: <code>GOOGLE_API_KEY</code> or <code>GROQ_API_KEY</code>. 
+      Template at <code>paper/research-pap.tex</code>.
+    </div>
+  </div>
+
+  <script src="js/main.js"></script>
+</body>
+</html>

@@ -1,183 +1,116 @@
-# 🎓 Research Paper Generator & AI Detection System
+# Research Paper Generator & AI Detection System
 
-[![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)](https://www.python.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-Latest-green.svg)](https://fastapi.tiangolo.com/)
-[![Streamlit](https://img.shields.io/badge/Streamlit-Latest-red.svg)](https://streamlit.io/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+A modular web application that generates academic research papers using AI models (Gemini/Groq) and provides AI-generated content detection capabilities.
 
-A comprehensive system that generates academic research papers using AI models (Gemini and Groq/Llama) and provides AI content detection capabilities. The system outputs professionally formatted LaTeX documents that can be compiled to PDF.
+## 🚀 Features
 
-## ✨ Features
-
-### 🤖 AI-Powered Research Paper Generation
-- **Multiple AI Providers**: Support for Google Gemini and Groq (Llama models)
-- **LaTeX Output**: Generate properly formatted academic papers in LaTeX
-- **PDF Compilation**: Automatic compilation to PDF using system LaTeX or Docker
-- **Template-Based**: Uses professional academic paper templates
-
-### 🔍 AI Content Detection
-- **Research Paper Analysis**: Detect AI-generated content in research papers
-- **Multiple Input Formats**: Support for LaTeX, PDF, and raw text
-- **Confidence Scoring**: Provides detection confidence scores (0-100)
-- **Detailed Reasoning**: Explains the detection rationale
-
-### 🖥️ Multiple Interfaces
-- **Web API**: RESTful API with FastAPI for programmatic access
-- **Interactive GUI**: Streamlit-based web interface for easy use
-- **Command Line**: Direct CLI usage for batch processing
-
-### 📊 Advanced Features
-- **Run Management**: Track and manage generation runs
-- **File Downloads**: Download LaTeX source and compiled PDFs
-- **Error Handling**: Robust error handling with detailed feedback
-- **Template Cleaning**: Automatic removal of problematic LaTeX elements
-
-## 🚀 Quick Start
-
-### Prerequisites
-- Python 3.12+
-- LaTeX distribution (TexLive recommended) OR Docker
-- API keys for your chosen AI provider
-
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone https://github.com/bharat3214/research-paper-generator-and-detector.git
-   cd research-paper-generator-and-detector
-   ```
-
-2. **Install dependencies**
-   ```bash
-   pip install uv  # If you don't have uv installed
-   uv sync
-   ```
-
-3. **Set up environment variables**
-   
-   ### Environment Variables
-   ```bash
-   # Required for Gemini
-   GOOGLE_API_KEY=your_gemini_api_key
-
-   # Required for Groq
-   GROQ_API_KEY=your_groq_api_key
-
-   ```
-
-4. **Install LaTeX (Optional - Docker fallback available)**
-   ```bash
-   # Ubuntu/Debian
-   sudo apt-get install texlive-full
-   
-   # macOS
-   brew install --cask mactex
-   
-   # Windows: Download from https://www.tug.org/texlive/
-   ```
-
-## 📖 Usage
-
-### Web Interface (Recommended)
-```bash
-streamlit run streamlit_app.py
-```
-Open http://localhost:8501 in your browser
-
-### API Server
-```bash
-# Using uv
-uv run serve
-
-# Or directly
-uvicorn api:app --reload --host 0.0.0.0 --port 8000
-```
-API documentation available at http://localhost:8000/docs
-
-### Command Line
-
-**Generate with Gemini:**
-```bash
-python main.py
-# Enter your research topic when prompted
-```
-
-**Generate with Groq:**
-```bash
-python groq_chat.py
-# Enter your research topic when prompted
-```
+- **AI Paper Generation**: Generate complete LaTeX research papers using Google Gemini or Groq LLaMA models
+- **Multiple AI Providers**: Support for both Gemini 2.5 Flash and Groq LLaMA-4 Maverick models  
+- **PDF Compilation**: Automatic LaTeX to PDF conversion with system or Docker fallback
+- **AI Content Detection**: Detect AI-generated content from LaTeX, raw text, or PDF files
+- **Modular Architecture**: Clean separation of frontend/backend with organized service layers
+- **RESTful API**: Well-documented FastAPI backend with automatic OpenAPI documentation
 
 ## 📁 Project Structure
 
 ```
 research-paper-generator-and-detector/
-├── 📄 README.md                 # This file
-├── 📄 CONTRIBUTING.md           # Contribution guidelines
-├── ⚙️ pyproject.toml            # Project dependencies and configuration
-├── 🔐 .env                      # Environment variables (create from .env.example)
-├── 🚫 .gitignore               # Git ignore rules
-│
-├── 🐍 main.py                  # Gemini-based paper generation (CLI)
-├── 🐍 groq_chat.py            # Groq/Llama-based paper generation (CLI)
-├── 🌐 streamlit_app.py        # Streamlit web interface
-├── 🔗 api.py                   # FastAPI REST API
-│
-├── 📂 paper/                   # LaTeX templates
-│   └── research-pap.tex       # Main research paper template
-│
-├── 📂 static/                  # Static web files
-│   ├── index.html             # API interface
-│   └── upload.html            # Upload interface
-│
-├── 📂 output/                  # Generated LaTeX files
-├── 📂 export/                  # Compiled PDF files
-└── 📂 runs/                    # Run management directory
+├── backend/                     # FastAPI Backend
+│   ├── main.py                 # FastAPI app entry point
+│   ├── requirements.txt        # Backend dependencies
+│   ├── .env                    # Environment variables
+│   ├── routes/
+│   │   └── api.py             # API endpoints
+│   ├── services/
+│   │   ├── gemini_chat.py     # Google Gemini service
+│   │   └── groq_chat.py       # Groq AI service
+│   ├── models/                # Pydantic models
+│   └── utils/
+│       └── latex_utils.py     # LaTeX processing utilities
+├── frontend/                   # Static Web Interface
+│   ├── index.html             # Main interface
+│   └── upload.html            # PDF upload interface
+├── paper/
+│   └── research-pap.tex       # LaTeX template
+├── runs/                      # Generated papers storage
+├── .gitignore
+├── README.md
+├── CONTRIBUTING.md
+└── uv.lock                    # Dependency lock file
 ```
 
+## 🛠️ Setup & Installation
 
-### LaTeX Requirements
-The system requires specific LaTeX packages:
-- `natbib` - Citation management
-- `geometry` - Page layout
-- `fancyhdr` - Headers and footers
-- `amsmath, amsfonts, amssymb` - Mathematical symbols
-- `graphicx` - Graphics support
-- `booktabs` - Professional tables
+### Prerequisites
+- Python 3.12+
+- Git
+- LaTeX distribution (TexLive) or Docker for PDF compilation
 
-
-## 🛠️ Development
-
-### Setting Up Development Environment
+### 1. Clone Repository
 ```bash
-# Clone repository
-git clone https://github.com/bharat3214/research-paper-generator-and-detector.git
+git clone <your-repository-url>
 cd research-paper-generator-and-detector
+```
 
-### Running in Development Mode
+### 2. Backend Setup
 ```bash
-# API with auto-reload
-uvicorn api:app --reload --port 8000
+# Navigate to backend
+cd backend
 
-# Streamlit with auto-reload
-streamlit run streamlit_app.py --server.runOnSave true
+# Create virtual environment
+python3 -m venv .venv
+source .venv/bin/activate  # Linux/Mac
+# or .venv\Scripts\activate  # Windows
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 3. Environment Configuration
+```bash
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your API keys
+GOOGLE_API_KEY=your_google_api_key_here
+GROQ_API_KEY=your_groq_api_key_here
+```
+
+### 4. Get API Keys
+- **Google Gemini**: Get API key from [Google AI Studio](https://aistudio.google.com/)
+- **Groq**: Get API key from [Groq Console](https://console.groq.com/)
+
+## 🚀 Running the Application
+
+### Start Backend Server
+```bash
+cd backend
+source .venv/bin/activate
+uvicorn main:app --reload --host 0.0.0.0 --port 8001
+```
+
+## 🐳 Docker Support (Optional)
+
+```bash
+# Build and run with Docker
+docker build -t paper-generator .
+docker run -p 8001:8001 --env-file backend/.env paper-generator
 ```
 
 ## 🤝 Contributing
 
-We welcome contributors!
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) for details on our code of conduct and the process for submitting pull requests.
 
-### Quick Contribution Steps
+### Quick Development Setup
 1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request
+2. Create a feature branch: `git checkout -b feature/amazing-feature`
+3. Make your changes following the project structure
+4. Test your changes thoroughly
+5. Submit a pull request
 
-## 📝 License
+## 📄 License
 
-This project is licensed under the MIT License.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-**Built with ❤️ for the academic and research community**
 
-*Generate professional research papers with AI, detect AI-generated content, and contribute to academic excellence.*
+**Made with ❤️ for academic research and AI detection**
