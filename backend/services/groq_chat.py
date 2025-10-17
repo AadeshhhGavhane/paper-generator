@@ -1,19 +1,51 @@
-from google import genai
-from google.genai import types
+from groq import Groq
 import os
 from dotenv import load_dotenv
 from datetime import datetime
 import subprocess
 from shutil import which
 import re
+import time
+import random
 
 load_dotenv()
 
-api_key = os.getenv("GOOGLE_API_KEY")
+api_key = os.getenv("GROQ_API_KEY")
 if not api_key:
-    raise RuntimeError("GOOGLE_API_KEY is not set. Add it to your environment or .env file.")
+    raise RuntimeError("GROQ_API_KEY is not set. Add it to your environment or .env file.")
 
-client = genai.Client(api_key=api_key)
+client = Groq(api_key=api_key)
+
+def retry_with_backoff(func, max_retries=3, base_delay=1, max_delay=60):
+    """Retry a function with exponential backoff and jitter."""
+    for attempt in range(max_retries):
+        try:
+            return func()
+        except Exception as e:
+            error_msg = str(e)
+            print(f"Attempt {attempt + 1} failed: {error_msg}")
+            
+            # Check if it's a rate limit or overload error
+            if any(keyword in error_msg.lower() for keyword in ['rate limit', '429', 'quota', 'overloaded', 'too many requests']):
+                if attempt < max_retries - 1:  # Don't sleep on the last attempt
+                    # Exponential backoff with jitter
+                    delay = min(base_delay * (2 ** attempt) + random.uniform(0, 1), max_delay)
+                    print(f"API rate limited, retrying in {delay:.1f} seconds...")
+                    time.sleep(delay)
+                    continue
+            
+            # If it's not a retryable error or last attempt, re-raise
+            if attempt == max_retries - 1:
+                # Provide user-friendly error messages
+                if 'rate limit' in error_msg.lower() or '429' in error_msg:
+                    raise RuntimeError("🚫 Groq API rate limit exceeded. Please try again in a few minutes, or use Gemini instead.")
+                elif 'quota' in error_msg.lower():
+                    raise RuntimeError("🚫 API quota exceeded. Please check your Groq API limits or try Gemini instead.")
+                elif 'invalid' in error_msg.lower() and 'key' in error_msg.lower():
+                    raise RuntimeError("🚫 Invalid Groq API key. Please check your GROQ_API_KEY in the .env file.")
+                else:
+                    raise RuntimeError(f"🚫 Groq API error: {error_msg}")
+            raise
 
 def read_template(template_path: str) -> str:
     if not os.path.exists(template_path):
@@ -83,26 +115,6 @@ def build_system_instruction(template_tex: str) -> str:
     )
 
 
-def sanitize_latex_output(text: str) -> str:
-    """Clean and sanitize the LaTeX output from the model."""
-    # Remove common code-fence wrappers if present
-    if text.strip().startswith("```"):
-        lines = text.splitlines()
-        if lines and lines[0].startswith("```"):
-            lines = lines[1:]
-        if lines and lines[-1].startswith("```"):
-            lines = lines[:-1]
-        text = "\n".join(lines)
-    
-    # Remove any remaining image-related content that the model might have generated
-    text = remove_images_from_latex(text)
-    
-    # Fix bibliography formatting issues
-    text = fix_bibliography_formatting(text)
-    
-    return text.strip()
-
-
 def fix_bibliography_formatting(tex_content: str) -> str:
     """Fix common bibliography formatting issues."""
     # Fix unescaped & characters in bibliography entries
@@ -158,6 +170,26 @@ def remove_images_from_latex(tex_content: str) -> str:
     tex_content = re.sub(r'\n\s*\n\s*\n+', '\n\n', tex_content)
     
     return tex_content
+
+
+def sanitize_latex_output(text: str) -> str:
+    """Clean and sanitize the LaTeX output from the model."""
+    # Remove common code-fence wrappers if present
+    if text.strip().startswith("```"):
+        lines = text.splitlines()
+        if lines and lines[0].startswith("```"):
+            lines = lines[1:]
+        if lines and lines[-1].startswith("```"):
+            lines = lines[:-1]
+        text = "\n".join(lines)
+    
+    # Remove any remaining image-related content that the model might have generated
+    text = remove_images_from_latex(text)
+    
+    # Fix bibliography formatting issues
+    text = fix_bibliography_formatting(text)
+    
+    return text.strip()
 
 
 def write_output(tex_content: str, out_dir: str = "output") -> str:
@@ -294,13 +326,31 @@ def main() -> None:
     )
 
     print("Generating research paper...")
-    response = client.models.generate_content(
-        model="gemini-2.0-flash-exp",  # Using the latest model
-        config=types.GenerateContentConfig(system_instruction=system_instruction),
-        contents=user_prompt,
-    )
-
-    tex = sanitize_latex_output(response.text or "")
+    
+    def make_api_call():
+        return client.chat.completions.create(
+            messages=[
+                {
+                    "role": "system",
+                    "content": system_instruction
+                },
+                {
+                    "role": "user",
+                    "content": user_prompt
+                }
+            ],
+            model="meta-llama/llama-4-maverick-17b-128e-instruct",  # Using Llama 3.3 70B for best quality
+            temperature=0.7,  # Some creativity but still focused
+            max_tokens=8000,  # Sufficient for a research paper
+        )
+    
+    try:
+        chat_completion = retry_with_backoff(make_api_call)
+        
+        tex = sanitize_latex_output(chat_completion.choices[0].message.content or "")
+        
+    except Exception as e:
+        raise RuntimeError(f"Failed to generate content with Groq: {e}")
 
     if not tex.startswith("\\documentclass") or not tex.strip().endswith("\\end{document}"):
         raise RuntimeError("Model output is not a complete LaTeX document.")

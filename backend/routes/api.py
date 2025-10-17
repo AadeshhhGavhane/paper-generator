@@ -13,15 +13,17 @@ import uuid
 import base64
 import io
 
-# Reuse existing logic
+# Import AI services from our modular structure
 try:
-    import main as gemini_generator
-except Exception:
+    from services import gemini_chat as gemini_generator
+except Exception as e:
+    print(f"Warning: Failed to import gemini_chat: {e}")
     gemini_generator = None
 
 try:
-    import groq_chat as groq_generator
-except Exception:
+    from services import groq_chat as groq_generator
+except Exception as e:
+    print(f"Warning: Failed to import groq_chat: {e}")
     groq_generator = None
 
 # PDF text extraction
@@ -35,14 +37,17 @@ app = FastAPI(title="Research Paper Generator API")
 # Persistent storage for generated runs (in-memory index)
 RUNS_INDEX: Dict[str, Dict[str, Optional[str]]] = {}
 
-# Directories
-PROJECT_ROOT = Path(__file__).resolve().parent
-STATIC_DIR = PROJECT_ROOT / "static"
+# Directories - Fix paths for new structure
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent  # Go up to project root
+STATIC_DIR = PROJECT_ROOT / "frontend"  # Point to frontend directory
 RUNS_DIR = PROJECT_ROOT / "runs"
 RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Serve static files
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
+# Mount CSS and JS files directly
+app.mount("/css", StaticFiles(directory=str(STATIC_DIR / "css")), name="css")
+app.mount("/js", StaticFiles(directory=str(STATIC_DIR / "js")), name="js")
 
 
 class GenerateRequest(BaseModel):
@@ -87,7 +92,7 @@ def _ensure_template_path() -> str:
     return str(template_path)
 
 
-def _generate_with_gemini(topic: str, workdir: Path) -> (Optional[str], Optional[str]):
+def _generate_with_gemini(topic: str, workdir: Path) -> tuple[Optional[str], Optional[str]]:
     if not gemini_generator:
         raise HTTPException(status_code=500, detail="Gemini module not available")
 
@@ -135,7 +140,7 @@ def _generate_with_gemini(topic: str, workdir: Path) -> (Optional[str], Optional
         os.chdir(original_cwd)
 
 
-def _generate_with_groq(topic: str, workdir: Path) -> (Optional[str], Optional[str]):
+def _generate_with_groq(topic: str, workdir: Path) -> tuple[Optional[str], Optional[str]]:
     if not groq_generator:
         raise HTTPException(status_code=500, detail="Groq module not available")
 
@@ -158,14 +163,17 @@ def _generate_with_groq(topic: str, workdir: Path) -> (Optional[str], Optional[s
             "Use -- as much as possible. Also Use textual emoticons like :) or :( or XD. THIS IS MANDATORY"
         )
 
-        chat_completion = groq_generator.client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_instruction},
-                {"role": "user", "content": user_prompt},
-            ],
-            model="meta-llama/llama-4-maverick-17b-128e-instruct",
-            temperature=0.7,
-            max_tokens=8000,
+        # Use retry logic for API calls
+        chat_completion = groq_generator.retry_with_backoff(
+            lambda: groq_generator.client.chat.completions.create(
+                messages=[
+                    {"role": "system", "content": system_instruction},
+                    {"role": "user", "content": user_prompt},
+                ],
+                model="meta-llama/llama-4-maverick-17b-128e-instruct",
+                temperature=0.7,
+                max_tokens=8000,
+            )
         )
 
         tex = groq_generator.sanitize_latex_output(chat_completion.choices[0].message.content or "")
@@ -218,11 +226,11 @@ async def generate(req: GenerateRequest):
 
         # Store absolute paths in index
         abs_tex = str(Path(tex_path).resolve()) if tex_path else None
-        abs_pdf = str(Path(pdf_path).resolve()) if pdf_path else None
+        abs_pdf = str(Path(pdf_path).resolve()) if pdf_path and os.path.exists(pdf_path) else None
         RUNS_INDEX[run_id] = {"tex": abs_tex, "pdf": abs_pdf}
 
         tex_filename = os.path.basename(abs_tex) if abs_tex else None
-        pdf_filename = os.path.basename(abs_pdf) if abs_pdf else None
+        pdf_filename = os.path.basename(abs_pdf) if abs_pdf and os.path.exists(abs_pdf) else None
 
         return GenerateResponse(
             run_id=run_id,
@@ -263,9 +271,19 @@ async def download_tex(run_id: str):
 @app.get("/download/pdf/{run_id}")
 async def download_pdf(run_id: str):
     meta = RUNS_INDEX.get(run_id)
-    if not meta or not meta.get("pdf") or not os.path.exists(meta["pdf"]):
-        raise HTTPException(status_code=404, detail="PDF not available")
-    return FileResponse(path=meta["pdf"], media_type="application/pdf", filename=os.path.basename(meta["pdf"]))
+    pdf_path: Optional[str] = None
+    if meta and meta.get("pdf") and os.path.exists(meta["pdf"]):
+        pdf_path = meta["pdf"]
+    else:
+        # Fallback: search in run directory for a .pdf file
+        run_dir = RUNS_DIR / run_id / "export"
+        if run_dir.exists():
+            candidates = [p for p in run_dir.glob("*.pdf")]
+            if candidates:
+                pdf_path = str(candidates[0].resolve())
+    if not pdf_path or not os.path.exists(pdf_path):
+        raise HTTPException(status_code=404, detail="PDF not available - compilation may have failed")
+    return FileResponse(path=pdf_path, media_type="application/pdf", filename=os.path.basename(pdf_path))
 
 
 def _detect_from_content(content: str) -> DetectResponse:
