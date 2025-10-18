@@ -32,10 +32,10 @@ By participating in this project, you agree to abide by our code of conduct:
 
 Before contributing, ensure you have:
 
-- **Python 3.12+** installed
+- **Python 3.12+** installed OR **Docker & Docker Compose**
 - **Git** for version control
 - **LaTeX distribution** (TexLive recommended) OR Docker
-- **Basic knowledge** of Python, FastAPI, and Streamlit
+- **Basic knowledge** of Python, FastAPI, and JavaScript
 - **Understanding** of LaTeX for document generation features
 
 ### 🔑 API Keys Setup
@@ -46,6 +46,28 @@ You'll need API keys for testing:
 2. **Groq API**: [Get API Key](https://console.groq.com/keys)
 
 ## 💻 Development Setup
+
+### Option 1: Docker Development (Recommended)
+
+```bash
+# 1. Fork and clone the repository
+git clone https://github.com/YOUR_USERNAME/paper-generator.git
+cd paper-generator
+
+# 2. Set up environment
+cp .env.example .env
+# Edit .env with your API keys
+
+# 3. Start development environment
+docker-compose -f docker-compose.yml -f docker-compose.override.yml up --build
+
+# Access:
+# - Frontend: http://localhost
+# - Backend: http://localhost:8000
+# - API Docs: http://localhost:8000/docs
+```
+
+### Option 2: Local Development
 
 ### 1. Fork and Clone
 

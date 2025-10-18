@@ -1,5 +1,10 @@
 /* Upload Page JavaScript - AI Detection Tool */
 
+// API Configuration
+const API_BASE_URL = window.location.hostname === 'localhost' && window.location.port === '3000' 
+  ? 'http://localhost:8000' 
+  : '';
+
 const $ = (s) => document.querySelector(s);
 const statusBox = $('#status');
 const fileInput = $('#file');
@@ -28,7 +33,7 @@ async function detect() {
     if (selectedFile && selectedFile.name.toLowerCase().endsWith('.pdf')) {
       const form = new FormData();
       form.append('file', selectedFile);
-      const r = await fetch('/detect_pdf', { method: 'POST', body: form });
+      const r = await fetch(`${API_BASE_URL}/detect_pdf`, { method: 'POST', body: form });
       const data = await r.json();
       if (!r.ok) throw new Error(data?.detail || 'PDF detection failed');
       setStatus(`🧠 Estimated AI score: ${data.score}%\nReason: ${data.reasoning}`, 'success');
@@ -39,7 +44,7 @@ async function detect() {
       setStatus('Please paste at least 50 characters of LaTeX or upload a PDF.', 'error'); 
       return; 
     }
-    const res = await fetch('/detect_raw', { 
+    const res = await fetch(`${API_BASE_URL}/detect_raw`, { 
       method: 'POST', 
       headers: { 'Content-Type': 'application/json' }, 
       body: JSON.stringify({ latex }) 
