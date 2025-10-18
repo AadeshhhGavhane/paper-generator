@@ -1,15 +1,14 @@
 /* Main Page JavaScript - Research Paper Generator */
 
+// API Configuration
+const API_BASE_URL = 'http://localhost:8000';
+
 const $ = (sel) => document.querySelector(sel);
 const statusBox = $('#status');
 const downloadsBox = $('#downloads');
 const dlTex = $('#dlTex');
 const dlPdf = $('#dlPdf');
 const generateBtn = $('#generateBtn');
-
-const detectRow = $('#detectRow');
-const detectBtn = $('#detectBtn');
-const detectStatus = $('#detectStatus');
 
 let currentRunId = null;
 
@@ -23,9 +22,8 @@ function clearDownloads() {
   downloadsBox.style.display = 'none';
   dlTex.href = '#';
   dlPdf.href = '#';
-  detectRow.style.display = 'none';
-  detectStatus.style.display = 'none';
-  detectStatus.textContent = '';
+  dlTex.style.display = 'none';
+  dlPdf.style.display = 'none';
   currentRunId = null;
 }
 
@@ -44,7 +42,7 @@ async function generatePaper() {
   setStatus(`Generating with ${provider}... This may take a moment.`, 'info');
 
   try {
-    const res = await fetch('/generate', {
+    const res = await fetch(`${API_BASE_URL}/generate`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ topic, provider })
@@ -59,31 +57,41 @@ async function generatePaper() {
     currentRunId = run_id;
     setStatus('✅ Generated successfully. You can download your files below.', 'success');
 
+    // Always show LaTeX download
     if (tex_filename) {
-      dlTex.href = `/download/tex/${encodeURIComponent(run_id)}`;
+      dlTex.href = `${API_BASE_URL}/download/tex/${encodeURIComponent(run_id)}`;
       dlTex.setAttribute('download', tex_filename);
-    }
-    if (pdf_filename) {
-      dlPdf.href = `/download/pdf/${encodeURIComponent(run_id)}`;
-      dlPdf.setAttribute('download', pdf_filename);
+      dlTex.style.display = 'inline-block';
     }
 
-    downloadsBox.style.display = 'grid';
-    detectRow.style.display = 'flex';
+    // Show PDF download if available
+    if (pdf_filename) {
+      dlPdf.href = `${API_BASE_URL}/download/pdf/${encodeURIComponent(run_id)}`;
+      dlPdf.setAttribute('download', pdf_filename);
+      dlPdf.style.display = 'inline-block';
+    } else {
+      // Show PDF button but with helpful message
+      dlPdf.href = '#';
+      dlPdf.onclick = (e) => {
+        e.preventDefault();
+        alert('PDF compilation failed. Try again or use the LaTeX file with Overleaf.');
+      };
+      dlPdf.style.display = 'inline-block';
+    }
+
+    downloadsBox.style.display = 'block';
+    detectRow.style.display = 'flex';  // Show the AI detection button
   } catch (err) {
     let errorMsg = err.message;
     
-    // Provide user-friendly error messages for common issues
     if (errorMsg.includes('API overloaded') || errorMsg.includes('503')) {
-      errorMsg = '🚫 AI service is currently overloaded. Please try again in a few minutes, or switch to a different AI provider.';
+      errorMsg = '🚫 AI service is currently overloaded. Please try again in a few minutes.';
     } else if (errorMsg.includes('rate limit') || errorMsg.includes('429')) {
       errorMsg = '⏳ Rate limit reached. Please wait a moment and try again.';
     } else if (errorMsg.includes('quota') || errorMsg.includes('billing')) {
-      errorMsg = '💳 API quota exceeded. Please check your API billing or try a different provider.';
-    } else if (errorMsg.includes('timeout') || errorMsg.includes('TimeoutError')) {
-      errorMsg = '⏰ Request timed out. The AI service may be slow. Please try again.';
+      errorMsg = '💳 API quota exceeded. Please check your API billing.';
     } else if (!errorMsg || errorMsg === 'Generation failed') {
-      errorMsg = '❌ Generation failed. Please try again with a different topic or AI provider.';
+      errorMsg = '❌ Generation failed. Please try again.';
     }
     
     setStatus(errorMsg, 'error');
@@ -106,7 +114,7 @@ async function detectAI() {
   detectStatus.style.display = 'block';
 
   try {
-    const res = await fetch('/detect', {
+    const res = await fetch(`${API_BASE_URL}/detect`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ run_id: currentRunId })

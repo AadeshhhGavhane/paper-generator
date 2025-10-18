@@ -95,13 +95,74 @@ source .venv/bin/activate
 uvicorn main:app --reload --host 0.0.0.0 --port 8001
 ```
 
-## 🐳 Docker Support (Optional)
+## 🐳 Docker Support
+
+The project includes full Docker containerization with separate containers for frontend and backend services.
+
+### Prerequisites
+- Docker and Docker Compose installed
+- Environment file configured (see [Environment Setup](#environment-setup))
+
+### Quick Start with Docker
 
 ```bash
-# Build and run with Docker
-docker build -t paper-generator .
-docker run -p 8001:8001 --env-file backend/.env paper-generator
+# Clone the repository
+git clone https://github.com/Kartika2005/paper-generator.git
+cd paper-generator
+
+# Create environment file
+cp .env.example .env
+# Edit .env with your API keys
+
+# Build and start all services
+docker-compose up --build
+
+# Or run in background
+docker-compose up -d --build
 ```
+
+### Docker Commands
+
+```bash
+# Start services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+
+# Rebuild specific service
+docker-compose build backend
+docker-compose build frontend
+
+# Access backend logs
+docker-compose logs backend
+
+# Access frontend logs
+docker-compose logs frontend
+```
+
+### Development with Docker
+
+For development with live reload:
+
+```bash
+# Start with development overrides
+docker-compose -f docker-compose.yml -f docker-compose.override.yml up --build
+```
+
+### Service Access
+- **Frontend**: http://localhost (port 80) or http://localhost:3000
+- **Backend API**: http://localhost:8000
+- **API Documentation**: http://localhost:8000/docs
+
+### Docker Architecture
+- **Frontend Container**: Nginx serving static files + reverse proxy
+- **Backend Container**: FastAPI application with LaTeX support
+- **Volumes**: Persistent storage for generated papers and cache
+- **Network**: Internal Docker network for service communication
 
 ## 🤝 Contributing
 

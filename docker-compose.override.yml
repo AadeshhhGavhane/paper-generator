@@ -1,0 +1,22 @@
+# Development overrides for docker-compose
+# Use with: docker-compose -f docker-compose.yml -f docker-compose.override.yml up
+
+version: '3.8'
+
+services:
+  backend:
+    volumes:
+      - ./backend:/app  # Live reload for development
+      - ./runs:/app/runs  # Ensure runs directory is mounted
+      - ./paper:/app/paper  # Ensure paper directory is mounted
+    environment:
+      - ENVIRONMENT=development
+      - PYTHONPATH=/app
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    ports:
+      - "8000:8000"  # Expose backend port for direct access
+  
+  frontend:
+    volumes:
+      - ./frontend:/usr/share/nginx/html  # Live reload for frontend files
+      - ./runs:/usr/share/nginx/html/files/runs:ro  # Mount generated files

@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse, JSONResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi import UploadFile, File
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Optional, Dict
 import os
@@ -15,13 +16,13 @@ import io
 
 # Import AI services from our modular structure
 try:
-    from services import gemini_chat as gemini_generator
+    from backend.services import gemini_chat as gemini_generator
 except Exception as e:
     print(f"Warning: Failed to import gemini_chat: {e}")
     gemini_generator = None
 
 try:
-    from services import groq_chat as groq_generator
+    from backend.services import groq_chat as groq_generator
 except Exception as e:
     print(f"Warning: Failed to import groq_chat: {e}")
     groq_generator = None
@@ -33,6 +34,15 @@ except Exception:
     PdfReader = None
 
 app = FastAPI(title="Research Paper Generator API")
+
+# Add CORS middleware to allow cross-origin requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Persistent storage for generated runs (in-memory index)
 RUNS_INDEX: Dict[str, Dict[str, Optional[str]]] = {}
@@ -122,8 +132,19 @@ def _generate_with_gemini(topic: str, workdir: Path) -> tuple[Optional[str], Opt
         )
         tex = gemini_generator.sanitize_latex_output(response.text or "")
 
-        if not tex.startswith("\\documentclass") or not tex.strip().endswith("\\end{document}"):
-            raise HTTPException(status_code=500, detail="Model output is not a complete LaTeX document.")
+        # Debug: Print first and last few lines to see what we got
+        print("=== LaTeX Generation Debug ===")
+        lines = tex.split('\n')
+        print(f"Total lines: {len(lines)}")
+        print(f"First 3 lines: {lines[:3]}")
+        print(f"Last 3 lines: {lines[-3:]}")
+        print(f"Starts with \\documentclass: {tex.startswith('\\documentclass')}")
+        print(f"Ends with \\end{{document}}: {tex.strip().endswith('\\end{document}')}")
+        print("=== End Debug ===")
+
+        # More lenient validation - just check if it has LaTeX structure
+        if "\\documentclass" not in tex or "\\end{document}" not in tex:
+            raise HTTPException(status_code=500, detail=f"Model output missing LaTeX document structure. Got {len(tex)} characters starting with: {tex[:100]}...")
 
         tex_path = gemini_generator.write_output(tex)
 
@@ -192,6 +213,200 @@ def _generate_with_groq(topic: str, workdir: Path) -> tuple[Optional[str], Optio
             pdf_path = None
 
         return tex_path, pdf_path
+    finally:
+        os.chdir(original_cwd)
+
+
+@app.post("/generate-latex", response_model=GenerateResponse)
+async def generate_latex_only(req: GenerateRequest):
+    """Generate LaTeX file only, no PDF compilation"""
+    topic = req.topic.strip()
+    if not topic:
+        raise HTTPException(status_code=400, detail="Topic cannot be empty")
+
+    # Environment key checks
+    if req.provider == "Gemini":
+        if gemini_generator is None:
+            raise HTTPException(status_code=500, detail="Gemini logic unavailable")
+        if not os.getenv("GOOGLE_API_KEY"):
+            raise HTTPException(status_code=500, detail="GOOGLE_API_KEY not set")
+    else:
+        if groq_generator is None:
+            raise HTTPException(status_code=500, detail="Groq logic unavailable")
+        if not os.getenv("GROQ_API_KEY"):
+            raise HTTPException(status_code=500, detail="GROQ_API_KEY not set")
+
+    run_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:8]
+    run_dir = RUNS_DIR / run_id
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        if req.provider == "Gemini":
+            tex_path, _ = _generate_with_gemini_latex_only(topic, run_dir)
+        else:
+            tex_path, _ = _generate_with_groq_latex_only(topic, run_dir)
+
+        # Store absolute paths in index
+        abs_tex = str(Path(tex_path).resolve()) if tex_path else None
+        RUNS_INDEX[run_id] = {"tex": abs_tex, "pdf": None}
+
+        tex_filename = os.path.basename(abs_tex) if abs_tex else None
+
+        return GenerateResponse(
+            run_id=run_id,
+            provider=req.provider,
+            tex_filename=tex_filename,
+            pdf_filename=None,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        try:
+            shutil.rmtree(run_dir, ignore_errors=True)
+        except Exception:
+            pass
+        raise HTTPException(status_code=500, detail=f"LaTeX generation failed: {e}")
+
+
+@app.post("/compile-pdf/{run_id}")
+async def compile_pdf_from_latex(run_id: str):
+    """Compile PDF from existing LaTeX file"""
+    meta = RUNS_INDEX.get(run_id)
+    
+    # If not in index, try to find the file directly
+    tex_path = None
+    if meta and meta.get("tex") and os.path.exists(meta["tex"]):
+        tex_path = meta["tex"]
+    else:
+        # Fallback: search in run directory for a .tex file
+        run_dir = RUNS_DIR / run_id / "output"
+        if run_dir.exists():
+            candidates = [p for p in run_dir.glob("*.tex")]
+            if candidates:
+                tex_path = str(candidates[0].resolve())
+    
+    if not tex_path or not os.path.exists(tex_path):
+        raise HTTPException(status_code=404, detail="LaTeX file not found for this run")
+    
+    try:
+        # Determine which compilation method to use
+        if shutil.which("pdflatex"):
+            if "gemini" in tex_path.lower():
+                pdf_path = gemini_generator.compile_latex_with_system(tex_path, export_dir="export")
+            else:
+                pdf_path = groq_generator.compile_latex_with_system(tex_path, export_dir="export")
+        else:
+            if "gemini" in tex_path.lower():
+                pdf_path = gemini_generator.compile_latex_with_docker(tex_path, export_dir="export")
+            else:
+                pdf_path = groq_generator.compile_latex_with_docker(tex_path, export_dir="export")
+        
+        # Update the index with PDF path
+        abs_pdf = str(Path(pdf_path).resolve()) if pdf_path and os.path.exists(pdf_path) else None
+        if run_id not in RUNS_INDEX:
+            RUNS_INDEX[run_id] = {"tex": tex_path, "pdf": abs_pdf}
+        else:
+            RUNS_INDEX[run_id]["pdf"] = abs_pdf
+        
+        pdf_filename = os.path.basename(abs_pdf) if abs_pdf else None
+        
+        return {"pdf_filename": pdf_filename}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF compilation failed: {e}")
+
+
+def _generate_with_gemini_latex_only(topic: str, workdir: Path) -> tuple[Optional[str], None]:
+    """Generate LaTeX only with Gemini, no PDF compilation"""
+    if not gemini_generator:
+        raise HTTPException(status_code=500, detail="Gemini module not available")
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(str(workdir))
+        os.makedirs("output", exist_ok=True)
+        os.makedirs("export", exist_ok=True)
+
+        template_path = _ensure_template_path()
+        template_tex = gemini_generator.read_template(template_path)
+        system_instruction = gemini_generator.build_system_instruction(template_tex)
+
+        user_prompt = (
+            "Generate a complete research paper in LaTeX strictly following the template. "
+            f"Topic: {topic}. "
+            "Ensure all placeholders are replaced with detailed, coherent content relevant to this topic. "
+            "Do NOT include any figures, images, or \\includegraphics commands. "
+            "Focus on comprehensive text content and mathematical equations only. Do NOT include any tables or tabular environments. Do Not Include Images"
+            "Use -- as much as possible. Also Use textual emoticons like :) or :( or XD. THIS IS MANDATORY"
+        )
+
+        response = gemini_generator.client.models.generate_content(
+            model="gemini-2.5-flash",
+            config=gemini_generator.types.GenerateContentConfig(system_instruction=system_instruction),
+            contents=user_prompt,
+        )
+        tex = gemini_generator.sanitize_latex_output(response.text or "")
+
+        # Debug: Print first and last few lines to see what we got
+        print("=== LaTeX Generation Debug ===")
+        lines = tex.split('\n')
+        print(f"Total lines: {len(lines)}")
+        print(f"First 3 lines: {lines[:3]}")
+        print(f"Last 3 lines: {lines[-3:]}")
+        print(f"Starts with \\documentclass: {tex.startswith('\\documentclass')}")
+        print(f"Ends with \\end{{document}}: {tex.strip().endswith('\\end{document}')}")
+        print("=== End Debug ===")
+
+        # More lenient validation - just check if it has LaTeX structure
+        if "\\documentclass" not in tex or "\\end{document}" not in tex:
+            raise HTTPException(status_code=500, detail=f"Model output missing LaTeX document structure. Got {len(tex)} characters starting with: {tex[:100]}...")
+
+        tex_path = gemini_generator.write_output(tex)
+        return tex_path, None
+    finally:
+        os.chdir(original_cwd)
+
+
+def _generate_with_groq_latex_only(topic: str, workdir: Path) -> tuple[Optional[str], None]:
+    """Generate LaTeX only with Groq, no PDF compilation"""
+    if not groq_generator:
+        raise HTTPException(status_code=500, detail="Groq module not available")
+
+    original_cwd = os.getcwd()
+    try:
+        os.chdir(str(workdir))
+        os.makedirs("output", exist_ok=True)
+        os.makedirs("export", exist_ok=True)
+
+        template_path = _ensure_template_path()
+        template_tex = groq_generator.read_template(template_path)
+        system_instruction = groq_generator.build_system_instruction(template_tex)
+
+        user_prompt = (
+            "Generate a complete research paper in LaTeX strictly following the template. "
+            f"Topic: {topic}. "
+            "Ensure all placeholders are replaced with detailed, coherent content relevant to this topic. "
+            "Do NOT include any figures, images, or \\includegraphics commands. "
+            "Focus on comprehensive text content and mathematical equations only. Do NOT include any tables or tabular environments. Do Not Include Images"
+            "Use -- as much as possible. Also Use textual emoticons like :) or :( or XD. THIS IS MANDATORY"
+        )
+
+        response = groq_generator.client.chat.completions.create(
+            model="llama-3.1-70b-versatile",
+            messages=[
+                {"role": "system", "content": system_instruction},
+                {"role": "user", "content": user_prompt}
+            ],
+            max_tokens=8000,
+            temperature=0.3,
+        )
+        tex = groq_generator.sanitize_latex_output(response.choices[0].message.content or "")
+
+        if "\\documentclass" not in tex or "\\end{document}" not in tex:
+            raise HTTPException(status_code=500, detail=f"Model output missing LaTeX document structure. Got {len(tex)} characters starting with: {tex[:100]}...")
+
+        tex_path = groq_generator.write_output(tex)
+        return tex_path, None
     finally:
         os.chdir(original_cwd)
 
